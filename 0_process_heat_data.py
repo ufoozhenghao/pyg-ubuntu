@@ -141,7 +141,7 @@ def read_and_generate_dataset(graph_signal_matrix_filename, num_of_depend, num_f
 
     return training_set, validation_set, testing_set
 
-graph_signal_matrix_filename = 'data/62/62_quarter_single_dataset.npz'
+graph_signal_matrix_filename = './62/62_quarter_single_dataset.npz'
 data = np.load(graph_signal_matrix_filename)
 
 # 查看文件中的键
