@@ -51,8 +51,8 @@ def get_sample_indices(data_sequence, num_of_depend, label_start_idx, num_for_pr
     points_per_hour: int, default 1, 每小时的数据点数
     Returns
     ----------
-    week_sample: np.ndarray shape is (num_of_weeks * points_per_hour, num_of_vertices, num_of_features)
-    day_sample: np.ndarray shape is (num_of_days * points_per_hour,  num_of_vertices, num_of_features)
+    # week_sample: np.ndarray shape is (num_of_weeks * points_per_hour, num_of_vertices, num_of_features)
+    # day_sample: np.ndarray shape is (num_of_days * points_per_hour,  num_of_vertices, num_of_features)
     hour_sample: np.ndarray   shape is (num_of_hours * points_per_hour, num_of_vertices, num_of_features)
     target: np.ndarray shape is (num_for_predict, num_of_vertices, num_of_features)
     """
@@ -95,7 +95,8 @@ def read_and_generate_dataset(graph_signal_matrix_filename, num_of_depend, num_f
 
     all_samples = []
     for idx in range(data_seq.shape[0]):
-        sample = get_sample_indices(data_seq, num_of_depend, idx, num_for_predict,points_per_hour)
+        sample = get_sample_indices(data_seq, num_of_depend, idx, num_for_predict, points_per_hour)
+
         if (sample[0] is None) and (sample[1] is None):
             continue
 
@@ -141,48 +142,6 @@ def read_and_generate_dataset(graph_signal_matrix_filename, num_of_depend, num_f
 
     return training_set, validation_set, testing_set
 
-graph_signal_matrix_filename = './62/62_quarter_single_dataset.npz'
-data = np.load(graph_signal_matrix_filename)
-
-# 查看文件中的键
-print("Keys in the .npz file:", data.files)
-# 查看每个数组的形状和数据类型
-for key in data.files:
-    array = data[key]
-    print(f"Array name: {key}")
-    print(f"Shape: {array.shape}") # Shape: (100, 186, 2)
-    print(f"Data type: {array.dtype}")
-    print(array[:5])
-    print('====================')
-
-
-node_temperature = data['data'][:, 61, 0]  # (100, 1，,1)
-print('节点序列长度： ', node_temperature.shape)
-print('节点第一组数据前5： ', node_temperature[:5])
-fig_temperature = plt.figure(figsize=(15, 5))
-plt.title('node_temperature')
-plt.xlabel('hours')
-plt.ylabel('temperature')
-plt.plot(np.arange(len(node_temperature)), node_temperature, linestyle='-')
-fig_temperature.autofmt_xdate(rotation=45)
-plt.show()
-
-# graph_signal_matrix_filename = 'dataset.npz'
-data_seq = np.load(graph_signal_matrix_filename)['data']
-print('data_seq.shape[0]: ', data_seq.shape[0])
-num_of_depend = 5       # 依赖的历史时间段数
-num_for_predict = 3     # 每个样本要预测的点数 
-units = 1
-points_per_hour = 1
-label_start_idx = 6     # 从第 6 小时开始预测
-
-
-training_set, validation_set, testing_set = read_and_generate_dataset(graph_signal_matrix_filename, num_of_depend, num_for_predict, points_per_hour);
-
-print("training_set 的形状:", [x.shape for x in training_set])
-print(training_set[0][0].shape)
-print([_x.shape for _x in training_set[:-2]])
-
 def normalization(train, val, test):
     """
     Parameters
@@ -197,17 +156,25 @@ def normalization(train, val, test):
 
     # 判断train 和 val的(N, F, T)形状；即在节点数量、特征数量和时间步长上的形状是相同的 train.shape[1:]=(307, 3, 12)
     assert train.shape[1:] == val.shape[1:] and val.shape[1:] == test.shape[1:]
-
+    print('train.shape[1:]:', train.shape[1:]) # (62, 2, 27)
+    print('Values along the time dimension:')
+    print(train[:, :, :, :])
     # mean：沿轴 (0, 1, 3) 计算均值，即对批量、节点和时间步进行平均，保留特征维度。
     # std：沿轴 (0, 1, 3) 计算标准差，同样保留特征维度。
     mean = train.mean(axis=(0, 1, 3), keepdims=True)  # train (B,N,F,T')
     std = train.std(axis=(0, 1, 3), keepdims=True)
     print('mean.shape:', mean.shape)
+    print(mean)
     print('std.shape:', std.shape)
+    print(std)
 
     # 零均值和单位标准差归一化函数
     def normalize(x):
-        return (x - mean) / std
+        # 特征的第二个维度为水温，目前水温为恒定 10/15/20... 故标准差为 0
+        if np.any(std == 0):
+            return x - mean
+        else:
+            return (x - mean) / std
 
     # 归一化训练集、验证集和测试集
     train_norm = normalize(train)
@@ -215,6 +182,51 @@ def normalization(train, val, test):
     test_norm = normalize(test)
 
     return {'_mean': mean, '_std': std}, train_norm, val_norm, test_norm
+
+# load data
+graph_signal_matrix_filename = './data/62/62_quarter_single_dataset.npz'
+data = np.load(graph_signal_matrix_filename)
+
+# 查看文件中的键
+# print("Keys in the .npz file:", data.files)
+# 查看每个数组的形状和数据类型
+# for key in data.files:
+#     array = data[key]
+#     print(f"Array name: {key}")
+#     print(f"Shape: {array.shape}") # Shape: (100, 186, 2)
+#     print(f"Data type: {array.dtype}")
+#     print(array[:5])
+#     print('====================')
+
+
+# node_temperature = data['data'][:, 61, 0]  # (100, 1，,1)
+# print('节点序列长度： ', node_temperature.shape)
+# print('节点第一组数据前5： ', node_temperature[:5])
+# fig_temperature = plt.figure(figsize=(15, 5))
+# plt.title('node_temperature')
+# plt.xlabel('hours')
+# plt.ylabel('temperature')
+# plt.plot(np.arange(len(node_temperature)), node_temperature, linestyle='-')
+# fig_temperature.autofmt_xdate(rotation=45)
+# plt.show()
+
+# graph_signal_matrix_filename = 'dataset.npz'
+data_seq = np.load(graph_signal_matrix_filename)['data']
+print('data_seq.shape[0]: ', data_seq.shape[0])
+num_of_depend = 5       # 依赖的历史时间段数
+num_for_predict = 3     # 每个样本要预测的点数 
+units = 1
+points_per_hour = 1
+label_start_idx = 4     # 从第 4 小时开始预测
+
+
+training_set, validation_set, testing_set = read_and_generate_dataset(graph_signal_matrix_filename, num_of_depend, num_for_predict, points_per_hour);
+
+print("training_set 的形状:", [x.shape for x in training_set])
+print(training_set[0][0].shape)
+print([_x.shape for _x in training_set[:-2]])
+
+
 
 # 从 training_set 中提取从第一个元素到倒数第三个元素（包括倒数第三个元素）的所有元素==>>在这里其实就是第一个元素(55, 186, 2, 15)，然后使用 np.concatenate 函数沿着指定的轴（这里是 axis=-1，即T'轴）将这些元素连接起来。
 # training_set 的形状: [(55, 186, 2, 15), (55, 186, 3), (55, 1)]
