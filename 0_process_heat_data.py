@@ -1,7 +1,6 @@
 import os
 import matplotlib.pyplot as plt
 import numpy as np
-from sympy.physics.units import hours
 
 
 # search_data 旨在从时间序列数据中提取一组索引对，用于预测模型的输入。它通过指定的历史依赖关系（num_of_depend）和其他参数来确定这些索引对。
