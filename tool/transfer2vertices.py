@@ -36,5 +36,7 @@ def convert_csv_to_json(input_file, output_file, output_npz):
     np.savez(output_npz, data=np_data)
 
 if __name__ == '__main__':
-    convert_csv_to_json('../data/62/62_quarter_single.csv', 'data/62/62_quarter_single_dataset.json', './62/62_quarter_single_dataset.npz')
+    convert_csv_to_json('../data/38/38_quarter_single_16t.csv',
+                        '../data/38/38_quarter_single_16t.json',
+                        '../data/38/38_quarter_single_16t.npz')
     print('done')
