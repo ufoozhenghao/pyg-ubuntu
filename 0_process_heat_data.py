@@ -99,31 +99,41 @@ def read_and_generate_dataset(graph_signal_matrix_file_array, num_of_depend, num
 
     # todo 多个数据集同时导入
     all_samples = []
-    for i in range(len(graph_signal_matrix_file_array)):
-        data_seq = np.load(graph_signal_matrix_file_array[i])['data']   # (500,38,2)
-        # print('data_seq.shape:',data_seq.shape[0])
-        for idx in range(data_seq.shape[0]):    # 500
-            sample = get_sample_indices(data_seq, num_of_depend, idx, num_for_predict, points_per_hour)
-            if (sample[0] is None) and (sample[1] is None):
-                continue
-            hour_sample, target = sample
-            sample = []
-
-            if num_of_depend > 0:
-                hour_sample = np.expand_dims(hour_sample, axis=0).transpose((0, 2, 3, 1))  # (1,N,F,T)
-                sample.append(hour_sample)
-
-            # [:, :, 0, :] 第二个轴选择0个元素==>>切片操作后，形状将从 (1, N, F, T) 变为 (1, N, T)
-            target = np.expand_dims(target, axis=0).transpose((0, 2, 3, 1))[:, :, 0, :]  # (1,N,T)
-            sample.append(target)
-            all_samples.append(sample)
-
-    for idx in range(np.load(graph_signal_matrix_file_array[0])['data'].shape[0]):
-        # 创建一个包含当前索引的时间样本，并添加到 sample 列表中
+    data_seq_0 = np.load(graph_signal_matrix_file_array[0])['data']
+    data_seq_1 = np.load(graph_signal_matrix_file_array[1])['data']
+    data_seq_2 = np.load(graph_signal_matrix_file_array[2])['data']
+    for idx in range(data_seq_0.shape[0]):
+    # ---------------0-----------------
+        _sample = get_sample_indices(data_seq_0, num_of_depend, idx, points_per_hour)
+        if _sample[0] is None:
+            continue
+        data_seq_0_sample, target = _sample
+        sample = []
+        data_seq_0_sample = np.expand_dims(data_seq_0_sample, axis=0).transpose((0, 2, 3, 1))  # (1,N,F,T)
+        sample.append(data_seq_0_sample)
+    # -----------------1-----------------
+        _sample = get_sample_indices(data_seq_1, num_of_depend, idx, points_per_hour)
+        if _sample[0] is None:
+            continue
+        data_seq_1_sample, target = _sample
+        sample = []
+        data_seq_1_sample = np.expand_dims(data_seq_1_sample, axis=0).transpose((0, 2, 3, 1))  # (1,N,F,T)
+        sample.append(data_seq_1_sample)
+    # ---------------2-------------
+        _sample = get_sample_indices(data_seq_2, num_of_depend, idx, points_per_hour)
+        if _sample[0] is None:
+            continue
+        data_seq_2_sample, target = _sample
+        sample = []
+        data_seq_2_sample = np.expand_dims(data_seq_2_sample, axis=0).transpose((0, 2, 3, 1))  # (1,N,F,T)
+        sample.append(data_seq_2_sample)
+    # -----------------time------------------
         time_sample = np.expand_dims(np.array([idx]), axis=0)  # (1,1)
-        all_samples.append(time_sample)
+    # todo sample：[(graph_array[0]_sample),(graph_array[1]_sample),(graph_array[2]_sample),target,time_sample]
+        sample.append(time_sample)
 
-    print('all_samples:',all_samples)
+        all_samples.append(sample)
+
     # 按比例将 all_samples 划分为训练集（60%）、验证集（20%）和测试集（20%）。使用 zip 和 np.concatenate 将样本拼接成一个数组。
     split_line1 = int(len(all_samples) * 0.6)   # 595
     split_line2 = int(len(all_samples) * 0.8)   # 794
@@ -242,6 +252,7 @@ print([_x.shape for _x in training_set[:-2]])
 # 从 training_set 中提取从第一个元素到倒数第三个元素（包括倒数第三个元素）的所有元素==>>在这里其实就是第一个元素(55, 186, 2, 15)，然后使用 np.concatenate 函数沿着指定的轴（这里是 axis=-1，即T'轴）将这些元素连接起来。
 # training_set 的形状: [(55, 186, 2, 15), (55, 186, 3), (55, 1)]
 
+# todo error
 train_x = np.concatenate(training_set[:-2], axis=-1)  # (B,N,F,T) (55, 186, 2, 15)
 val_x = np.concatenate(validation_set[:-2], axis=-1)
 test_x = np.concatenate(testing_set[:-2], axis=-1)

@@ -2,7 +2,7 @@
 @File    : transfer2vertices.py
 @Author  : zhenghaoxuan
 @Date    : 2024/10/16 10:34
-@Feature : 将 one_quarter_single.csv 转换为 dataset.json 和 dataset.npz
+@Feature : 将 节点温度数据.csv 转换为 dataset.json 和 dataset.npz
 """
 
 import csv
