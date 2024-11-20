@@ -69,7 +69,7 @@ def get_sample_indices(data_sequence, num_of_depend, label_start_idx, num_for_pr
         if not hour_indices:
             return None, None
         hour_sample = np.concatenate([data_sequence[i: j] for i, j in hour_indices], axis=0)
-        print('hour_indices：', hour_indices)
+        # print('hour_indices：', hour_indices)
 
     # 超过 10 小时的数据依赖是不合理的或不需要的
     if num_of_depend > 10:
@@ -100,8 +100,9 @@ def read_and_generate_dataset(graph_signal_matrix_file_array, num_of_depend, num
     # todo 多个数据集同时导入
     all_samples = []
     for i in range(len(graph_signal_matrix_file_array)):
-        data_seq = np.load(graph_signal_matrix_file_array[i])
-        for idx in range(data_seq.shape[0]):
+        data_seq = np.load(graph_signal_matrix_file_array[i])['data']   # (500,38,2)
+        # print('data_seq.shape:',data_seq.shape[0])
+        for idx in range(data_seq.shape[0]):    # 500
             sample = get_sample_indices(data_seq, num_of_depend, idx, num_for_predict, points_per_hour)
             if (sample[0] is None) and (sample[1] is None):
                 continue
@@ -116,15 +117,16 @@ def read_and_generate_dataset(graph_signal_matrix_file_array, num_of_depend, num
             target = np.expand_dims(target, axis=0).transpose((0, 2, 3, 1))[:, :, 0, :]  # (1,N,T)
             sample.append(target)
             all_samples.append(sample)
-            print(all_samples)
-    for idx in range(np.load(graph_signal_matrix_file_array[0]).shape[0]):
+
+    for idx in range(np.load(graph_signal_matrix_file_array[0])['data'].shape[0]):
         # 创建一个包含当前索引的时间样本，并添加到 sample 列表中
         time_sample = np.expand_dims(np.array([idx]), axis=0)  # (1,1)
         all_samples.append(time_sample)
 
+    print('all_samples:',all_samples)
     # 按比例将 all_samples 划分为训练集（60%）、验证集（20%）和测试集（20%）。使用 zip 和 np.concatenate 将样本拼接成一个数组。
-    split_line1 = int(len(all_samples) * 0.6)
-    split_line2 = int(len(all_samples) * 0.8)
+    split_line1 = int(len(all_samples) * 0.6)   # 595
+    split_line2 = int(len(all_samples) * 0.8)   # 794
 
     # zip 函数用于将多个可迭代对象打包成一个元组的迭代器。*subset_samples 表示对 subset_samples 进行解包操作。
     training_set = [np.concatenate(i, axis=0) for i in
@@ -231,7 +233,7 @@ points_per_hour = 1
 label_start_idx = 4  # 从第 4 小时开始预测
 
 training_set, validation_set, testing_set = read_and_generate_dataset(graph_signal_matrix_file_array, num_of_depend,
-                                                                      num_for_predict, points_per_hour);
+                                                                      num_for_predict, points_per_hour)
 
 print("training_set 的形状:", [x.shape for x in training_set])
 print(training_set[0][0].shape)
