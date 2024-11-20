@@ -9,34 +9,34 @@ import csv
 import json
 import numpy as np
 
-def convert_csv_to_json(input_file, output_file, output_npz):
+
+def convert_csv_to_json(temperature, input_file, output_file, output_npz):
     data = []
+    row_data = []
     group_attributes = [10, 12, 14, 16, 18, 20]  # 每组的隐藏属性
 
     with open(input_file, newline='', encoding='utf-8-sig') as csvfile:
         csvreader = csv.reader(csvfile)
-        for row in csvreader:
-            row_data = []
-            for i in range(6):
-                group_data = row[i*62:(i+1)*62]
-                for value in group_data:
-                    # 去除空格并转换为浮点数
-                    cleaned_value = float(value.strip())
-                    row_data.append([cleaned_value, group_attributes[i]])
-            data.append(row_data)
+        processed_data=[]
+        all_data = list(csvreader)
+        # 处理数据
+        for row in all_data:
+            processed_row = [[float(value), temperature] for value in row]
+            processed_data.append(processed_row)
 
-    output = {"data": data}
-
+    output = {"data": processed_data}
+    # print(output)
     with open(output_file, 'w') as jsonfile:
         json.dump(output, jsonfile, indent=4)
 
-    # 转换为 NumPy 数组
+    # # 转换为 NumPy 数组
     np_data = np.array(data, dtype=np.float64)
     # 保存为 .npz 文件
     np.savez(output_npz, data=np_data)
 
 if __name__ == '__main__':
-    convert_csv_to_json('../data/38/38_quarter_single_16t.csv',
-                        '../data/38/38_quarter_single_16t.json',
-                        '../data/38/38_quarter_single_16t.npz')
+    water_temperature = 18
+    convert_csv_to_json(water_temperature,'../data/38/38_quarter_single_18t.csv',
+                        '../data/38/38_quarter_single_18t.json',
+                        '../data/38/38_quarter_single_18t.npz')
     print('done')
