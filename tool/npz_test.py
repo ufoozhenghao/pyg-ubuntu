@@ -7,7 +7,7 @@
 
 import numpy as np
 
-graph_signal_matrix_filename = 'dataset.npz'
+graph_signal_matrix_filename = '../data/38/38_quarter_single_24t.npz'
 data = np.load(graph_signal_matrix_filename)
 
 # 查看文件中的键
@@ -23,13 +23,13 @@ for key in data.files:
 
 import matplotlib.pyplot as plt
 
-flow = data['data'][:, 62, 0]  # (100, 1，,1)
+flow = data['data'][:, 20, 0]  # (100, 1，,1)
 print(flow.shape)
 print(flow[:5])
 fig_flow = plt.figure(figsize=(15, 5))
 plt.title('traffic Flow')
 plt.xlabel('minute')
-plt.ylabel('flow')
+plt.ylabel('temp')
 plt.plot(np.arange(len(flow)), flow, linestyle='-')
 fig_flow.autofmt_xdate(rotation=45)
 plt.show()
