@@ -80,87 +80,6 @@ def get_sample_indices(data_sequence, num_of_depend, label_start_idx, num_for_pr
     return hour_sample, target
 
 
-# 从图信号矩阵文件（节点温度数据）中读取数据，并生成用于训练、验证和测试的数据集。
-def read_and_generate_dataset(graph_signal_matrix_file_array, num_of_depend, num_for_predict, points_per_hour=1):
-    """
-    Parameters
-    ----------
-    graph_signal_matrix_filename: str, path of graph signal matrix file
-    num_of_depend: int， 依赖的小时数。例如，如果你想依赖过去的 3 小时数据，那么 num_of_hours 就是 3
-    num_for_predict: int
-    points_per_hour: int, default 1, depends on data
-    Returns
-    ----------
-    feature: np.ndarray, shape is (num_of_samples, num_of_depend * points_per_hour, num_of_vertices, num_of_features)
-    target: np.ndarray, shape is (num_of_samples, num_of_vertices, num_for_predict)
-    """
-    # Read original data
-    # data_seq = np.load(graph_signal_matrix_filename)['data']  # (sequence_length, num_of_vertices, num_of_features) (16992, 307, 3)
-
-    # todo 多个数据集同时导入
-    all_samples = []
-    data_seq_0 = np.load(graph_signal_matrix_file_array[0])['data']
-    data_seq_1 = np.load(graph_signal_matrix_file_array[1])['data']
-    data_seq_2 = np.load(graph_signal_matrix_file_array[2])['data']
-    for idx in range(data_seq_0.shape[0]):
-    # ---------------0-----------------
-        _sample = get_sample_indices(data_seq_0, num_of_depend, idx, points_per_hour)
-        if _sample[0] is None:
-            continue
-        data_seq_0_sample, target = _sample
-        sample = []
-        data_seq_0_sample = np.expand_dims(data_seq_0_sample, axis=0).transpose((0, 2, 3, 1))  # (1,N,F,T)
-        sample.append(data_seq_0_sample)
-    # -----------------1-----------------
-        _sample = get_sample_indices(data_seq_1, num_of_depend, idx, points_per_hour)
-        if _sample[0] is None:
-            continue
-        data_seq_1_sample, target = _sample
-        sample = []
-        data_seq_1_sample = np.expand_dims(data_seq_1_sample, axis=0).transpose((0, 2, 3, 1))  # (1,N,F,T)
-        sample.append(data_seq_1_sample)
-    # ---------------2-------------
-        _sample = get_sample_indices(data_seq_2, num_of_depend, idx, points_per_hour)
-        if _sample[0] is None:
-            continue
-        data_seq_2_sample, target = _sample
-        sample = []
-        data_seq_2_sample = np.expand_dims(data_seq_2_sample, axis=0).transpose((0, 2, 3, 1))  # (1,N,F,T)
-        sample.append(data_seq_2_sample)
-    # -----------------time------------------
-        time_sample = np.expand_dims(np.array([idx]), axis=0)  # (1,1)
-    # todo sample：[(graph_array[0]_sample),(graph_array[1]_sample),(graph_array[2]_sample),target,time_sample]
-        sample.append(time_sample)
-
-        all_samples.append(sample)
-
-    # 按比例将 all_samples 划分为训练集（60%）、验证集（20%）和测试集（20%）。使用 zip 和 np.concatenate 将样本拼接成一个数组。
-    split_line1 = int(len(all_samples) * 0.6)   # 595
-    split_line2 = int(len(all_samples) * 0.8)   # 794
-
-    # zip 函数用于将多个可迭代对象打包成一个元组的迭代器。*subset_samples 表示对 subset_samples 进行解包操作。
-    training_set = [np.concatenate(i, axis=0) for i in
-                    zip(*all_samples[:split_line1])]  # [(B,N,F,Tw),(B,N,F,Td),(B,N,F,Th),(B,N,Tpre),(B,1)]
-    validation_set = [np.concatenate(i, axis=0) for i in zip(*all_samples[split_line1: split_line2])]
-    testing_set = [np.concatenate(i, axis=0) for i in zip(*all_samples[split_line2:])]
-
-    """
-    zipped_samples = zip(*subset_samples)
-    结果是一个迭代器，内容如下：
-    [
-      (array1_1, array1_2, ..., array1_10),
-      (array2_1, array2_2, ..., array2_10),
-      (array3_1, array3_2, ..., array3_10),
-      (array4_1, array4_2, ..., array4_10),
-      (array5_1, array5_2, ..., array5_10)
-    ]
-
-    np.concatenate 后 training_set 中每个数组的形状：(B * split_line1, N, F, T)
-    """
-
-    return training_set, validation_set, testing_set
-
-
 def normalization(train, val, test):
     """
     Parameters
@@ -203,6 +122,142 @@ def normalization(train, val, test):
     return {'_mean': mean, '_std': std}, train_norm, val_norm, test_norm
 
 
+# 从图信号矩阵文件（节点温度数据）中读取数据，并生成用于训练、验证和测试的数据集。
+def read_and_generate_dataset(graph_signal_matrix_file_array, num_of_depend, num_for_predict, points_per_hour=1):
+    """
+    Parameters
+    ----------
+    graph_signal_matrix_filename: str, path of graph signal matrix file
+    num_of_depend: int， 依赖的小时数。例如，如果你想依赖过去的 3 小时数据，那么 num_of_hours 就是 3
+    num_for_predict: int
+    points_per_hour: int, default 1, depends on data
+    Returns
+    ----------
+    feature: np.ndarray, shape is (num_of_samples, num_of_depend * points_per_hour, num_of_vertices, num_of_features)
+    target: np.ndarray, shape is (num_of_samples, num_of_vertices, num_for_predict)
+    """
+    # Read original data
+    # data_seq = np.load(graph_signal_matrix_filename)['data']  # (sequence_length, num_of_vertices, num_of_features) (16992, 307, 3)
+
+    # 多个数据集同时导入
+    all_samples = []
+    data_seq_0 = np.load(graph_signal_matrix_file_array[0])['data']
+    data_seq_1 = np.load(graph_signal_matrix_file_array[1])['data']
+    data_seq_2 = np.load(graph_signal_matrix_file_array[2])['data']
+    for idx in range(data_seq_0.shape[0]):
+        sample = []
+        # ---------------0-----------------
+        _sample = get_sample_indices(data_seq_0, num_of_depend, idx, points_per_hour)
+        if _sample[0] is None:
+            continue
+        data_seq_0_sample, target = _sample
+        signal_array_0 = np.expand_dims(data_seq_0_sample, axis=0).transpose((0, 2, 3, 1))  # (1,N,F,T)
+        sample.append(signal_array_0)
+        # -----------------1-----------------
+        _sample = get_sample_indices(data_seq_1, num_of_depend, idx, points_per_hour)
+        if _sample[0] is None:
+            continue
+        data_seq_1_sample, _ = _sample
+        signal_array_1 = np.expand_dims(data_seq_1_sample, axis=0).transpose((0, 2, 3, 1))  # (1,N,F,T)
+        sample.append(signal_array_1)
+        # ---------------2-------------
+        _sample = get_sample_indices(data_seq_2, num_of_depend, idx, points_per_hour)
+        if _sample[0] is None:
+            continue
+        data_seq_2_sample, _ = _sample
+        signal_array_2 = np.expand_dims(data_seq_2_sample, axis=0).transpose((0, 2, 3, 1))  # (1,N,F,T)
+        sample.append(signal_array_2)
+        # ---------------target-------------
+        target_0 = np.expand_dims(target, axis=0).transpose((0, 2, 3, 1))[:, :, 0, :]  # (1,N,T)
+        sample.append(target_0)
+        # -----------------time------------------
+        time_sample = np.expand_dims(np.array([idx]), axis=0)  # (1,1)
+        # sample：[(signal_array[0]_sample),(signal_array[1]_sample),(signal_array[2]_sample),target_0,time_sample]
+        sample.append(time_sample)
+
+        all_samples.append(sample)
+
+    # 按比例将 all_samples 划分为训练集（60%）、验证集（20%）和测试集（20%）。使用 zip 和 np.concatenate 将样本拼接成一个数组。
+    split_line1 = int(len(all_samples) * 0.6)  # 595
+    split_line2 = int(len(all_samples) * 0.8)  # 794
+
+    # zip 函数用于将多个可迭代对象打包成一个元组的迭代器。*subset_samples 表示对 subset_samples 进行解包操作。
+    training_set = [np.concatenate(i, axis=0) for i in
+                    zip(*all_samples[:split_line1])]  # [(B,N,F,Tw),(B,N,F,Td),(B,N,F,Th),(B,N,Tpre),(B,1)]
+    validation_set = [np.concatenate(i, axis=0) for i in zip(*all_samples[split_line1: split_line2])]
+    testing_set = [np.concatenate(i, axis=0) for i in zip(*all_samples[split_line2:])]
+
+    """
+    zipped_samples = zip(*subset_samples)
+    结果是一个迭代器，内容如下：
+    [
+      (array1_1, array1_2, ..., array1_10),
+      (array2_1, array2_2, ..., array2_10),
+      (array3_1, array3_2, ..., array3_10),
+      (array4_1, array4_2, ..., array4_10),
+      (array5_1, array5_2, ..., array5_10)
+    ]
+
+    np.concatenate 后 training_set 中每个数组的形状：(B * split_line1, N, F, T)
+    """
+
+    train_signal_0, train_signal_1, train_signal_2, train_target_0, train_timestamp = training_set
+    val_signal_0, val_signal_1, val_signal_2, val_target_0, val_timestamp = validation_set
+    test_signal_0, test_signal_1, test_signal_2, test_target_0, test_timestamp = testing_set
+
+    print('training data: signal_0: {}, signal_1: {}, signal_2: {}, target: {}'.format(
+        train_signal_0.shape, train_signal_1.shape,
+        train_signal_2.shape, train_target_0.shape))
+    print('validation data: signal_0: {}, signal_1: {}, signal_2: {}, target: {}'.format(
+        val_signal_0.shape, val_signal_1.shape, val_signal_2.shape, val_target_0.shape))
+    print('testing data: signal_0: {}, signal_1: {}, signal_2: {}, target: {}'.format(
+        test_signal_0.shape, test_signal_1.shape, test_signal_2.shape, test_target_0.shape))
+
+    # normalization
+    (signal_0_stats, train_signal_0_norm, val_signal_0_norm, test_signal_0_norm) = normalization(train_signal_0,
+                                                                                                 val_signal_0,
+                                                                                                 test_signal_0)
+
+    (signal_1_stats, train_signal_1_norm, val_signal_1_norm, test_signal_1_norm) = normalization(train_signal_1,
+                                                                                                 val_signal_1,
+                                                                                                 test_signal_0)
+
+    (signal_2_stats, train_signal_2_norm, val_signal_2_norm, test_signal_2_norm) = normalization(train_signal_2,
+                                                                                                 val_signal_2,
+                                                                                                 test_signal_2)
+
+    all_data = {
+        'train': {
+            'signal_0': train_signal_0_norm,
+            'signal_1': train_signal_1_norm,
+            'signal_2': train_signal_2_norm,
+            'target': train_target_0,
+            'timestamp': train_timestamp
+        },
+        'val': {
+            'signal_0': val_signal_0_norm,
+            'signal_1': val_signal_1_norm,
+            'signal_2': val_signal_2_norm,
+            'target': val_target_0,
+            'timestamp': val_timestamp
+        },
+        'test': {
+            'signal_0': test_signal_0_norm,
+            'signal_1': test_signal_1_norm,
+            'signal_2': test_signal_2_norm,
+            'target': test_target_0,
+            'timestamp': val_timestamp
+        },
+        'stats': {
+            'signal_0': signal_0_stats,
+            'signal_1': signal_1_stats,
+            'signal_2': signal_2_stats,
+        }
+    }
+
+    return all_data
+
+
 # load data
 graph_signal_matrix_file_array = ['./data/38/38_quarter_single_16t.npz', './data/38/38_quarter_single_18t.npz',
                                   './data/38/38_quarter_single_20t.npz']
@@ -242,63 +297,29 @@ units = 1
 points_per_hour = 1
 label_start_idx = 4  # 从第 4 小时开始预测
 
-training_set, validation_set, testing_set = read_and_generate_dataset(graph_signal_matrix_file_array, num_of_depend,
-                                                                      num_for_predict, points_per_hour)
+all_data = read_and_generate_dataset(graph_signal_matrix_file_array, num_of_depend, num_for_predict, points_per_hour)
 
-print("training_set 的形状:", [x.shape for x in training_set])
-print(training_set[0][0].shape)
-print([_x.shape for _x in training_set[:-2]])
-
-# 从 training_set 中提取从第一个元素到倒数第三个元素（包括倒数第三个元素）的所有元素==>>在这里其实就是第一个元素(55, 186, 2, 15)，然后使用 np.concatenate 函数沿着指定的轴（这里是 axis=-1，即T'轴）将这些元素连接起来。
-# training_set 的形状: [(55, 186, 2, 15), (55, 186, 3), (55, 1)]
-
-# todo error
-train_x = np.concatenate(training_set[:-2], axis=-1)  # (B,N,F,T) (55, 186, 2, 15)
-val_x = np.concatenate(validation_set[:-2], axis=-1)
-test_x = np.concatenate(testing_set[:-2], axis=-1)
-
-_train_x = training_set[0]
-assert np.array_equal(_train_x, train_x), "Contents are not equal"
-
-train_target = training_set[-2]  # (B,N,T) (55, 186, 3)
-val_target = validation_set[-2]
-test_target = testing_set[-2]
-
-train_timestamp = training_set[-1]  # (B,1) (55, 1)
-val_timestamp = validation_set[-1]
-test_timestamp = testing_set[-1]
-
-(stats, train_x_norm, val_x_norm, test_x_norm) = normalization(train_x, val_x, test_x)
-
-print('train_x_norm.shape:', train_x_norm.shape)
-
-all_data = {'train': {'x': train_x_norm, 'target': train_target, 'timestamp': train_timestamp},
-            'val': {'x': val_x_norm, 'target': val_target, 'timestamp': val_timestamp},
-            'test': {'x': test_x_norm, 'target': test_target, 'timestamp': test_timestamp},
-            'stats': {'_mean': stats['_mean'], '_std': stats['_std']}}
-
-print('train x:', all_data['train']['x'].shape)
+print('train signal_0:', all_data['train']['signal_0'].shape)
 print('train target:', all_data['train']['target'].shape)
 print('train timestamp:', all_data['train']['timestamp'].shape)
 print()
-print('val x:', all_data['val']['x'].shape)
+print('val signal_0:', all_data['val']['signal_0'].shape)
 print('val target:', all_data['val']['target'].shape)
 print('val timestamp:', all_data['val']['timestamp'].shape)
 print()
-print('test x:', all_data['test']['x'].shape)
+print('test signal_0:', all_data['test']['signal_0'].shape)
 print('test target:', all_data['test']['target'].shape)
 print('test timestamp:', all_data['test']['timestamp'].shape)
 print()
-print('train data _mean :', all_data['stats']['_mean'].shape, '\n', all_data['stats']['_mean'])
-print('train data _std :', all_data['stats']['_std'].shape, '\n', all_data['stats']['_std'])
+print('train signal_0 stats _mean :', all_data['stats']['signal_0']['_mean'])
+print('train signal_0 stats _std :', all_data['stats']['signal_0']['_std'])
 
 # 输出
-file = os.path.basename(graph_signal_matrix_filename).split('.')[0]  # 获取文件名
-
-sensor_number = '62'
+dirpath = '../data/38/'
+sensor_number = '38'
 model_scale = 'quarter'  # 模型比例
 layer = 'single'  # 混凝土层数 单层
-filename = f"{sensor_number}_{model_scale}_{layer}_dataset_astcgn"
+filename = os.path.join(dirpath, str(sensor_number)  + '_' + str(model_scale) + '_' + str(layer) +'_dataset_astcgn')
 print('save file:', filename)
 """
 使用 np.savez_compressed 函数将数据保存到一个压缩的 .npz 文件中。
@@ -324,3 +345,13 @@ np.savez_compressed(filename,
                     test_x=all_data['test']['x'], test_target=all_data['test']['target'],
                     test_timestamp=all_data['test']['timestamp'],
                     mean=all_data['stats']['_mean'], std=all_data['stats']['_std'])
+
+
+# np.savez_compressed(filename,
+#                     train_x=all_data['train']['x'], train_target=all_data['train']['target'],
+#                     train_timestamp=all_data['train']['timestamp'],
+#                     val_x=all_data['val']['x'], val_target=all_data['val']['target'],
+#                     val_timestamp=all_data['val']['timestamp'],
+#                     test_x=all_data['test']['x'], test_target=all_data['test']['target'],
+#                     test_timestamp=all_data['test']['timestamp'],
+#                     mean=all_data['stats']['_mean'], std=all_data['stats']['_std'])
