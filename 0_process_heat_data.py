@@ -1,5 +1,5 @@
 import os
-import matplotlib.pyplot as plt
+import re
 import numpy as np
 
 
@@ -95,8 +95,7 @@ def normalization(train, val, test):
     # 判断train 和 val的(N, F, T)形状；即在节点数量、特征数量和时间步长上的形状是相同的 train.shape[1:]=(307, 3, 12)
     assert train.shape[1:] == val.shape[1:] and val.shape[1:] == test.shape[1:]
     print('train.shape[1:]:', train.shape[1:])  # (62, 2, 27)
-    print('Values along the time dimension:')
-    print(train[:, :, :, :])
+
     # mean：沿轴 (0, 1, 3) 计算均值，即对批量、节点和时间步进行平均，保留特征维度。
     # std：沿轴 (0, 1, 3) 计算标准差，同样保留特征维度。
     mean = train.mean(axis=(0, 1, 3), keepdims=True)  # train (B,N,F,T')
@@ -262,35 +261,7 @@ def read_and_generate_dataset(graph_signal_matrix_file_array, num_of_depend, num
 graph_signal_matrix_file_array = ['./data/38/38_quarter_single_16t.npz', './data/38/38_quarter_single_18t.npz',
                                   './data/38/38_quarter_single_20t.npz']
 
-# graph_signal_matrix_filename = './data/38/38_quarter_single_16t.npz'
-# data = np.load(graph_signal_matrix_filename)
-# 查看文件中的键
-# print("Keys in the .npz file:", data.files)
-# 查看每个数组的形状和数据类型
-# for key in data.files:
-#     array = data[key]
-#     print(f"Array name: {key}")
-#     print(f"Shape: {array.shape}") # Shape: (100, 186, 2)
-#     print(f"Data type: {array.dtype}")
-#     print(array[:5])
-#     print('====================')
-
-
-# node_temperature = data['data'][:, 61, 0]  # (100, 1，,1)
-# print('节点序列长度： ', node_temperature.shape)
-# print('节点第一组数据前5： ', node_temperature[:5])
-# fig_temperature = plt.figure(figsize=(15, 5))
-# plt.title('node_temperature')
-# plt.xlabel('hours')
-# plt.ylabel('temperature')
-# plt.plot(np.arange(len(node_temperature)), node_temperature, linestyle='-')
-# fig_temperature.autofmt_xdate(rotation=45)
-# plt.show()
-
-# graph_signal_matrix_filename = 'dataset.npz'
-# data_seq = np.load(graph_signal_matrix_filename)['data']
-# print('data_seq.shape[0]: ', data_seq.shape[0])
-
+# config
 num_of_depend = 5  # 依赖的历史时间段数
 num_for_predict = 3  # 每个样本要预测的点数
 units = 1
@@ -315,12 +286,24 @@ print('train signal_0 stats _mean :', all_data['stats']['signal_0']['_mean'])
 print('train signal_0 stats _std :', all_data['stats']['signal_0']['_std'])
 
 # 输出
-dirpath = '../data/38/'
+dirpath = './data/38/'
 sensor_number = '38'
 model_scale = 'quarter'  # 模型比例
 layer = 'single'  # 混凝土层数 单层
-filename = os.path.join(dirpath, str(sensor_number)  + '_' + str(model_scale) + '_' + str(layer) +'_dataset_astcgn')
+# 提取数字的正则表达式模式
+temperature = re.compile(r'_(\d+)t\.npz')
+# 提取数字并存储到列表中
+cool_water_temperature = []
+for file_path in graph_signal_matrix_file_array:
+    match = temperature.search(file_path)
+    if match:
+        cool_water_temperature.append(match.group(1))
+cool_water_temperature_str = '_'.join(cool_water_temperature)
+filename = os.path.join(dirpath, str(sensor_number)  + '_' + str(model_scale) + '_' + str(layer) + '_' + cool_water_temperature_str + '_dataset_astcgn')
 print('save file:', filename)
+
+np.savez_compressed(filename, all_data=all_data)
+
 """
 使用 np.savez_compressed 函数将数据保存到一个压缩的 .npz 文件中。
 filename 是保存文件的路径。
@@ -337,21 +320,3 @@ test_timestamp：测试数据的时间戳。
 mean：数据的均值（用于数据标准化）。
 std：数据的标准差（用于数据标准化）。
 """
-np.savez_compressed(filename,
-                    train_x=all_data['train']['x'], train_target=all_data['train']['target'],
-                    train_timestamp=all_data['train']['timestamp'],
-                    val_x=all_data['val']['x'], val_target=all_data['val']['target'],
-                    val_timestamp=all_data['val']['timestamp'],
-                    test_x=all_data['test']['x'], test_target=all_data['test']['target'],
-                    test_timestamp=all_data['test']['timestamp'],
-                    mean=all_data['stats']['_mean'], std=all_data['stats']['_std'])
-
-
-# np.savez_compressed(filename,
-#                     train_x=all_data['train']['x'], train_target=all_data['train']['target'],
-#                     train_timestamp=all_data['train']['timestamp'],
-#                     val_x=all_data['val']['x'], val_target=all_data['val']['target'],
-#                     val_timestamp=all_data['val']['timestamp'],
-#                     test_x=all_data['test']['x'], test_target=all_data['test']['target'],
-#                     test_timestamp=all_data['test']['timestamp'],
-#                     mean=all_data['stats']['_mean'], std=all_data['stats']['_std'])
