@@ -6,52 +6,37 @@ class SpatialAttentionLayer(nn.Module):
     """
     Compute spatial attention scores
     """
-    def __init__(self):
-        super(SpatialAttentionLayer, self).__init__()
-        self.W_1 = nn.Parameter(torch.Tensor())
-        self.W_2 = nn.Parameter(torch.Tensor())
-        self.W_3 = nn.Parameter(torch.Tensor())
-        self.b_s = nn.Parameter(torch.Tensor())
-        self.V_s = nn.Parameter(torch.Tensor())
+    def __init__(self, **kwargs):
+        super(SpatialAttentionLayer, self).__init__(**kwargs)
+        self._W1 = nn.Parameter(torch.FloatTensor())  #for example (12)
+        self._W2 = nn.Parameter(torch.FloatTensor()) #for example (1, 12)
+        self._W3 = nn.Parameter(torch.FloatTensor()) #for example (1)
+        self._bs = nn.Parameter(torch.FloatTensor()) #for example (1,307, 307)
+        self._Vs = nn.Parameter(torch.FloatTensor()) #for example (307, 307)
+
+    def _reset_parameters(self):
+        for p in self.parameters():
+            if p.dim() > 1:
+                nn.init.xavier_uniform_(p)
+            else:
+                nn.init.uniform_(p)
+
 
     def forward(self, x):
         """
-        Parameters
-        ----------
-        x: torch.Tensor, x^{(r - 1)}_h,
-           shape is (batch_size, N, C_{r-1}, T_{r-1})
-
-        Returns
-        ----------
-        S_normalized: torch.Tensor, S', spatial attention scores
-                      shape is (batch_size, N, N)
+        :param x: (batch_size, N, F_in, T)
+        :return: (B,N,N)
         """
-        batch_size, num_of_vertices, num_of_features, num_of_timesteps = x.shape
+        lhs = torch.matmul(torch.matmul(x, self._W1), self._W2)
 
-        # Initialize parameters
-        if self.W_1.nelement() == 0:
-            self.W_1 = nn.Parameter(torch.empty(num_of_timesteps))
-            self.W_2 = nn.Parameter(torch.empty(num_of_features, num_of_timesteps))
-            self.W_3 = nn.Parameter(torch.empty(num_of_features))
-            self.b_s = nn.Parameter(torch.empty(1, num_of_vertices, num_of_vertices))
-            self.V_s = nn.Parameter(torch.empty(num_of_vertices, num_of_vertices))
-            nn.init.xavier_uniform_(self.W_1)
-            nn.init.xavier_uniform_(self.W_2)
-            nn.init.xavier_uniform_(self.W_3)
-            nn.init.zeros_(self.b_s)
-            nn.init.xavier_uniform_(self.V_s)
-
-        lhs = torch.matmul(torch.matmul(x, self.W_1), self.W_2)
-
-        rhs = torch.matmul(self.W_3, x.permute(2, 0, 3, 1))
+        rhs = torch.matmul(self._W3, x).transpose(-1, -2)
 
         product = torch.matmul(lhs, rhs)
 
-        S = torch.matmul(self.V_s, torch.sigmoid(product + self.b_s).permute(1, 2, 0)).permute(2, 0, 1)
+        S = torch.matmul(self._Vs, torch.sigmoid(product + self._bs))
 
-        S = S - torch.max(S, dim=1, keepdim=True)[0]
-        exp = torch.exp(S)
-        S_normalized = exp / torch.sum(exp, dim=1, keepdim=True)
+        S_normalized = F.softmax(S, dim=1)
+
         return S_normalized
 
 
@@ -59,12 +44,12 @@ class ChebConvWithSAt(nn.Module):
     """
     K-order Chebyshev graph convolution with Spatial Attention scores
     """
-    def __init__(self, num_of_filters, K, cheb_polynomials):
-        super(ChebConvWithSAt, self).__init__()
+    def __init__(self, num_of_filters, K, cheb_polynomials, **kwargs):
+        super(ChebConvWithSAt, self).__init__(**kwargs)
         self.K = K
         self.num_of_filters = num_of_filters
         self.cheb_polynomials = cheb_polynomials
-        self.Theta = nn.Parameter(torch.Tensor())
+        self.Theta = nn.ParameterList([nn.Parameter(torch.FloatTensor()) for _ in range(K)])
 
     def forward(self, x, spatial_attention):
         """
@@ -108,11 +93,11 @@ class TemporalAttentionLayer(nn.Module):
     """
     def __init__(self):
         super(TemporalAttentionLayer, self).__init__()
-        self.U_1 = nn.Parameter(torch.Tensor())
-        self.U_2 = nn.Parameter(torch.Tensor())
-        self.U_3 = nn.Parameter(torch.Tensor())
-        self.b_e = nn.Parameter(torch.Tensor())
-        self.V_e = nn.Parameter(torch.Tensor())
+        self.U_1 = nn.Parameter(torch.FloatTensor())
+        self.U_2 = nn.Parameter(torch.FloatTensor())
+        self.U_3 = nn.Parameter(torch.FloatTensor())
+        self.b_e = nn.Parameter(torch.FloatTensor())
+        self.V_e = nn.Parameter(torch.FloatTensor())
 
     def forward(self, x):
         """
@@ -148,9 +133,8 @@ class TemporalAttentionLayer(nn.Module):
 
         E = torch.matmul(self.V_e, torch.sigmoid(product + self.b_e).permute(1, 2, 0)).permute(2, 0, 1)
 
-        E = E - torch.max(E, dim=1, keepdim=True)[0]
-        exp = torch.exp(E)
-        E_normalized = exp / torch.sum(exp, dim=1, keepdim=True)
+        E_normalized = F.softmax(E, dim=1)
+
         return E_normalized
 
 
@@ -248,7 +232,6 @@ class ASTGCNSubmodule(nn.Module):
             out_channels=num_for_prediction,
             kernel_size=(1, 1)
         )
-        self.W = nn.Parameter(torch.Tensor(backbones[-1]['num_of_vertices'], num_for_prediction))
         self.reset_parameters()
 
     # 用于初始化或重置模型的参数
@@ -259,7 +242,12 @@ class ASTGCNSubmodule(nn.Module):
         self.W 是一个 nn.Parameter 对象，表示模型中的一个可训练参数。
     在这个具体的例子中，它是一个形状为 (num_of_vertices, num_for_prediction) 的权重矩阵，用于对模型的最后输出进行线性变换
         """
-        nn.init.xavier_uniform_(self.W)
+        for p in self.parameters():
+            if p.dim() > 1:
+                nn.init.xavier_uniform_(p)
+            else:
+                nn.init.uniform_(p)
+
 
     def forward(self, x):
         """
@@ -275,13 +263,13 @@ class ASTGCNSubmodule(nn.Module):
         """
         x = self.blocks(x)
         module_output = self.final_conv(x.permute(0, 3, 1, 2))[:, :, :, -1].permute(0, 2, 1)
-        return module_output * self.W
+        return module_output
 
 class ASTGCN(nn.Module):
     """
     ASTGCN, 3 submodules, for hour, day, week respectively
     """
-    def __init__(self, num_for_prediction, all_backbones):
+    def __init__(self, num_for_prediction, all_backbones, **kwargs):
         """
         Parameters
         ----------
@@ -289,7 +277,7 @@ class ASTGCN(nn.Module):
 
         all_backbones: list[list], 3 backbones for "hour", "day", "week" submodules
         """
-        super(ASTGCN, self).__init__()
+        super(ASTGCN, self).__init__(**kwargs)
         if len(all_backbones) <= 0:
             raise ValueError("The length of all_backbones must be greater than 0")
 
