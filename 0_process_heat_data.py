@@ -219,7 +219,7 @@ def read_and_generate_dataset(graph_signal_matrix_file_array, num_of_depend, num
 
     (signal_1_stats, train_signal_1_norm, val_signal_1_norm, test_signal_1_norm) = normalization(train_signal_1,
                                                                                                  val_signal_1,
-                                                                                                 test_signal_0)
+                                                                                                 test_signal_1)
 
     (signal_2_stats, train_signal_2_norm, val_signal_2_norm, test_signal_2_norm) = normalization(train_signal_2,
                                                                                                  val_signal_2,
@@ -282,6 +282,7 @@ print('test signal_0:', all_data['test']['signal_0'].shape)
 print('test target:', all_data['test']['target'].shape)
 print('test timestamp:', all_data['test']['timestamp'].shape)
 print()
+print('all_data stats:',all_data['stats'])
 print('train signal_0 stats _mean :', all_data['stats']['signal_0']['_mean'])
 print('train signal_0 stats _std :', all_data['stats']['signal_0']['_std'])
 
@@ -302,7 +303,7 @@ cool_water_temperature_str = '_'.join(cool_water_temperature)
 filename = os.path.join(dirpath, str(sensor_number)  + '_' + str(model_scale) + '_' + str(layer) + '_' + cool_water_temperature_str + '_dataset_astcgn')
 print('save file:', filename)
 
-np.savez_compressed(filename, all_data=all_data)
+np.savez_compressed(filename, data=all_data)
 
 """
 使用 np.savez_compressed 函数将数据保存到一个压缩的 .npz 文件中。
