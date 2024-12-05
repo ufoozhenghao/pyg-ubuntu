@@ -160,11 +160,11 @@ class ASTGCNBlock(nn.Module):
         cheb_polynomials = backbone["cheb_polynomials"]
 
         self.SAt = SpatialAttentionLayer()
+        self.TAt = TemporalAttentionLayer()
         self.cheb_conv_SAt = ChebConvWithSAt(
             num_of_filters=num_of_chev_filters,
             K=K,
             cheb_polynomials=cheb_polynomials)
-        self.TAt = TemporalAttentionLayer()
         self.time_conv = nn.Conv2d(
             in_channels=num_of_chev_filters,
             out_channels=num_of_time_filters,
@@ -202,10 +202,13 @@ class ASTGCNBlock(nn.Module):
         # Convolution along time axis
         time_conv_output = self.time_conv(spatial_gcn.permute(0, 2, 1, 3)).permute(0, 2, 1, 3)
 
-        # Residual shortcut
-        x_residual = self.residual_conv(x.permute(0, 2, 1, 3)).permute(0, 2, 1, 3)
+        # residual shortcut
+        x_residual = self.residual_conv(x.permute(0, 2, 1, 3))  # (b,N,F,T)->(b,F,N,T) 用(1,1)的卷积核去做->(b,F,N,T)
 
-        return self.ln(F.relu(x_residual + time_conv_output))
+        x_residual = self.ln(F.relu(x_residual + time_conv_output).permute(0, 3, 2, 1)).permute(0, 2, 3, 1)
+        # (b,F,N,T)->(b,T,N,F) -ln-> (b,T,N,F)->(b,N,F,T)
+
+        return x_residual
 
 
 class ASTGCNSubmodule(nn.Module):
@@ -223,8 +226,8 @@ class ASTGCNSubmodule(nn.Module):
         super(ASTGCNSubmodule, self).__init__()
 
         self.blocks = nn.Sequential()
-        for backbone in backbones:
-            self.blocks.add_module("ASTGCNBlock", ASTGCNBlock(backbone))
+        for idx, backbone in enumerate(backbones):
+            self.blocks.add_module(f"ASTGCNBlock_{idx}", ASTGCNBlock(backbone))
 
         # Use convolution to generate the prediction instead of using the fully connected layer
         self.final_conv = nn.Conv2d(
