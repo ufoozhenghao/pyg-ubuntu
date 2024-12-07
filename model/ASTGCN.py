@@ -93,11 +93,27 @@ class TemporalAttentionLayer(nn.Module):
     """
     def __init__(self,num_of_vertices, num_of_features, num_of_timesteps):
         super(TemporalAttentionLayer, self).__init__()
-        self.U_1 = nn.Parameter(torch.FloatTensor(num_of_vertices))
-        self.U_2 = nn.Parameter(torch.FloatTensor(num_of_features, num_of_vertices))
-        self.U_3 = nn.Parameter(torch.FloatTensor(num_of_features))
-        self.b_e = nn.Parameter(torch.FloatTensor(1, num_of_timesteps, num_of_timesteps))
-        self.V_e = nn.Parameter(torch.FloatTensor(num_of_timesteps, num_of_timesteps))
+        # 初始化为空的Parameter
+        self.U_1 = nn.Parameter(torch.FloatTensor())
+        self.U_2 = nn.Parameter(torch.FloatTensor())
+        self.U_3 = nn.Parameter(torch.FloatTensor())
+        self.b_e = nn.Parameter(torch.FloatTensor())
+        self.V_e = nn.Parameter(torch.FloatTensor())
+
+    def _initialize_parameters(self, num_of_vertices, num_of_features, num_of_timesteps):
+        # 判断是否需要初始化
+        if self.U_1.nelement() == 0:
+            self.U_1.data = torch.FloatTensor(num_of_vertices)
+            self.U_2.data = torch.FloatTensor(num_of_features, num_of_vertices)
+            self.U_3.data = torch.FloatTensor(num_of_features)
+            self.b_e.data = torch.FloatTensor(1, num_of_timesteps, num_of_timesteps)
+            self.V_e.data = torch.FloatTensor(num_of_timesteps, num_of_timesteps)
+
+            nn.init.xavier_uniform_(self.U_1)
+            nn.init.xavier_uniform_(self.U_2)
+            nn.init.xavier_uniform_(self.U_3)
+            nn.init.zeros_(self.b_e)
+            nn.init.xavier_uniform_(self.V_e)
 
     def forward(self, x):
         """
@@ -112,6 +128,8 @@ class TemporalAttentionLayer(nn.Module):
                       shape is (batch_size, T_{r-1}, T_{r-1})
         """
         batch_size, num_of_vertices, num_of_features, num_of_timesteps = x.shape
+
+        self._initialize_parameters(num_of_vertices, num_of_features, num_of_timesteps)
 
         lhs = torch.matmul(torch.matmul(x.permute(0, 3, 2, 1), self.U_1), self.U_2)
 
@@ -148,7 +166,7 @@ class ASTGCNBlock(nn.Module):
         cheb_polynomials = backbone["cheb_polynomials"]
 
         self.SAt = SpatialAttentionLayer()
-        self.TAt = TemporalAttentionLayer(num_of_vertices=38, num_of_features=1, num_of_timesteps=5)
+        self.TAt = TemporalAttentionLayer(num_of_vertices=38, num_of_features=1, num_of_timesteps=1)
         self.cheb_conv_SAt = ChebConvWithSAt(
             num_of_filters=num_of_chev_filters,
             K=K,
