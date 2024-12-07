@@ -91,13 +91,13 @@ class TemporalAttentionLayer(nn.Module):
     """
     Compute temporal attention scores
     """
-    def __init__(self):
+    def __init__(self,num_of_vertices, num_of_features, num_of_timesteps):
         super(TemporalAttentionLayer, self).__init__()
-        self.U_1 = nn.Parameter(torch.FloatTensor())
-        self.U_2 = nn.Parameter(torch.FloatTensor())
-        self.U_3 = nn.Parameter(torch.FloatTensor())
-        self.b_e = nn.Parameter(torch.FloatTensor())
-        self.V_e = nn.Parameter(torch.FloatTensor())
+        self.U_1 = nn.Parameter(torch.FloatTensor(num_of_vertices))
+        self.U_2 = nn.Parameter(torch.FloatTensor(num_of_features, num_of_vertices))
+        self.U_3 = nn.Parameter(torch.FloatTensor(num_of_features))
+        self.b_e = nn.Parameter(torch.FloatTensor(1, num_of_timesteps, num_of_timesteps))
+        self.V_e = nn.Parameter(torch.FloatTensor(num_of_timesteps, num_of_timesteps))
 
     def forward(self, x):
         """
@@ -112,18 +112,6 @@ class TemporalAttentionLayer(nn.Module):
                       shape is (batch_size, T_{r-1}, T_{r-1})
         """
         batch_size, num_of_vertices, num_of_features, num_of_timesteps = x.shape
-
-        if self.U_1.nelement() == 0:
-            self.U_1 = nn.Parameter(torch.empty(num_of_vertices))
-            self.U_2 = nn.Parameter(torch.empty(num_of_features, num_of_vertices))
-            self.U_3 = nn.Parameter(torch.empty(num_of_features))
-            self.b_e = nn.Parameter(torch.empty(1, num_of_timesteps, num_of_timesteps))
-            self.V_e = nn.Parameter(torch.empty(num_of_timesteps, num_of_timesteps))
-            nn.init.xavier_uniform_(self.U_1)
-            nn.init.xavier_uniform_(self.U_2)
-            nn.init.xavier_uniform_(self.U_3)
-            nn.init.zeros_(self.b_e)
-            nn.init.xavier_uniform_(self.V_e)
 
         lhs = torch.matmul(torch.matmul(x.permute(0, 3, 2, 1), self.U_1), self.U_2)
 
@@ -160,7 +148,7 @@ class ASTGCNBlock(nn.Module):
         cheb_polynomials = backbone["cheb_polynomials"]
 
         self.SAt = SpatialAttentionLayer()
-        self.TAt = TemporalAttentionLayer()
+        self.TAt = TemporalAttentionLayer(num_of_vertices=38, num_of_features=1, num_of_timesteps=5)
         self.cheb_conv_SAt = ChebConvWithSAt(
             num_of_filters=num_of_chev_filters,
             K=K,
@@ -215,7 +203,7 @@ class ASTGCNSubmodule(nn.Module):
     """
     A submodule in ASTGCN
     """
-    def __init__(self, num_for_prediction, backbones):
+    def __init__(self, num_for_prediction, backbones, **kwargs):
         """
         Parameters
         ----------
@@ -223,7 +211,7 @@ class ASTGCNSubmodule(nn.Module):
 
         backbones: list(dict), list of backbones
         """
-        super(ASTGCNSubmodule, self).__init__()
+        super(ASTGCNSubmodule, self).__init__(**kwargs)
 
         self.blocks = nn.Sequential()
         for idx, backbone in enumerate(backbones):
@@ -231,9 +219,9 @@ class ASTGCNSubmodule(nn.Module):
 
         # Use convolution to generate the prediction instead of using the fully connected layer
         self.final_conv = nn.Conv2d(
-            in_channels=backbones[-1]['num_of_time_filters'],
+            in_channels=backbones[-1]['num_of_chev_filters'],
             out_channels=num_for_prediction,
-            kernel_size=(1, 1)
+            kernel_size=(1, backbones[-1]['num_of_time_filters'])
         )
         self.reset_parameters()
 
@@ -311,6 +299,7 @@ class ASTGCN(nn.Module):
 
         submodule_outputs = [self.submodules[idx](x_list[idx]) for idx in range(len(x_list))]
 
+        print('submodule_outputs:', submodule_outputs)
         return torch.sum(torch.stack(submodule_outputs), dim=0)
 
 

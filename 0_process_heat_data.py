@@ -231,21 +231,21 @@ def read_and_generate_dataset(graph_signal_matrix_file_array, num_of_depend, num
             'signal_1': train_signal_1_norm,
             'signal_2': train_signal_2_norm,
             'target': train_target_0,
-            'timestamp': train_timestamp
+            # 'timestamp': train_timestamp
         },
         'val': {
             'signal_0': val_signal_0_norm,
             'signal_1': val_signal_1_norm,
             'signal_2': val_signal_2_norm,
             'target': val_target_0,
-            'timestamp': val_timestamp
+            # 'timestamp': val_timestamp
         },
         'test': {
             'signal_0': test_signal_0_norm,
             'signal_1': test_signal_1_norm,
             'signal_2': test_signal_2_norm,
             'target': test_target_0,
-            'timestamp': val_timestamp
+            # 'timestamp': val_timestamp
         },
         'stats': {
             'signal_0': signal_0_stats,
@@ -272,15 +272,15 @@ all_data = read_and_generate_dataset(graph_signal_matrix_file_array, num_of_depe
 
 print('train signal_0:', all_data['train']['signal_0'].shape)
 print('train target:', all_data['train']['target'].shape)
-print('train timestamp:', all_data['train']['timestamp'].shape)
+# print('train timestamp:', all_data['train']['timestamp'].shape)
 print()
 print('val signal_0:', all_data['val']['signal_0'].shape)
 print('val target:', all_data['val']['target'].shape)
-print('val timestamp:', all_data['val']['timestamp'].shape)
+# print('val timestamp:', all_data['val']['timestamp'].shape)
 print()
 print('test signal_0:', all_data['test']['signal_0'].shape)
 print('test target:', all_data['test']['target'].shape)
-print('test timestamp:', all_data['test']['timestamp'].shape)
+# print('test timestamp:', all_data['test']['timestamp'].shape)
 print()
 print('all_data stats:',all_data['stats'])
 print('train signal_0 stats _mean :', all_data['stats']['signal_0']['_mean'])
