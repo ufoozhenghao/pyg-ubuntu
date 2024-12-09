@@ -231,21 +231,21 @@ def read_and_generate_dataset(graph_signal_matrix_file_array, num_of_depend, num
             'signal_1': train_signal_1_norm,
             'signal_2': train_signal_2_norm,
             'target': train_target_0,
-            # 'timestamp': train_timestamp
+            'timestamp': train_timestamp
         },
         'val': {
             'signal_0': val_signal_0_norm,
             'signal_1': val_signal_1_norm,
             'signal_2': val_signal_2_norm,
             'target': val_target_0,
-            # 'timestamp': val_timestamp
+            'timestamp': val_timestamp
         },
         'test': {
             'signal_0': test_signal_0_norm,
             'signal_1': test_signal_1_norm,
             'signal_2': test_signal_2_norm,
             'target': test_target_0,
-            # 'timestamp': val_timestamp
+            'timestamp': val_timestamp
         },
         'stats': {
             'signal_0': signal_0_stats,
@@ -262,7 +262,7 @@ graph_signal_matrix_file_array = ['./data/38/38_quarter_single_16t.npz', './data
                                   './data/38/38_quarter_single_20t.npz']
 
 # config
-num_of_depend = 5  # 依赖的历史时间段数
+num_of_depend = 5  # 依赖的历史时间段数 =num_of_weeks=num_of_days=num_of_hours
 num_for_predict = 3  # 每个样本要预测的点数
 units = 1
 points_per_hour = 1

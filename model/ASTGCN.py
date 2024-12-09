@@ -128,8 +128,11 @@ class TemporalAttentionLayer(nn.Module):
                       shape is (batch_size, T_{r-1}, T_{r-1})
         """
         batch_size, num_of_vertices, num_of_features, num_of_timesteps = x.shape
+        print('num_of_vertices:', num_of_vertices)
+        print('num_of_features:', num_of_features)
+        print('num_of_timesteps:', num_of_timesteps)
 
-        self._initialize_parameters(num_of_vertices, num_of_features, num_of_timesteps)
+        # self._initialize_parameters(num_of_vertices, num_of_features, num_of_timesteps)
 
         lhs = torch.matmul(torch.matmul(x.permute(0, 3, 2, 1), self.U_1), self.U_2)
 
@@ -145,7 +148,7 @@ class TemporalAttentionLayer(nn.Module):
 
 
 class ASTGCNBlock(nn.Module):
-    def __init__(self, backbone):
+    def __init__(self, backbone, len_input=5,num_of_vertices=38,in_channels=1):
         """
         Parameters
         ----------
@@ -166,7 +169,7 @@ class ASTGCNBlock(nn.Module):
         cheb_polynomials = backbone["cheb_polynomials"]
 
         self.SAt = SpatialAttentionLayer()
-        self.TAt = TemporalAttentionLayer(num_of_vertices=38, num_of_features=1, num_of_timesteps=1)
+        self.TAt = TemporalAttentionLayer()
         self.cheb_conv_SAt = ChebConvWithSAt(
             num_of_filters=num_of_chev_filters,
             K=K,
