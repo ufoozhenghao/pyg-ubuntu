@@ -6,13 +6,15 @@ class SpatialAttentionLayer(nn.Module):
     """
     Compute spatial attention scores
     """
-    def __init__(self, **kwargs):
-        super(SpatialAttentionLayer, self).__init__(**kwargs)
-        self._W1 = nn.Parameter(torch.FloatTensor())  #for example (12)
-        self._W2 = nn.Parameter(torch.FloatTensor()) #for example (1, 12)
-        self._W3 = nn.Parameter(torch.FloatTensor()) #for example (1)
-        self._bs = nn.Parameter(torch.FloatTensor()) #for example (1,307, 307)
-        self._Vs = nn.Parameter(torch.FloatTensor()) #for example (307, 307)
+    def __init__(self, num_of_timesteps, num_of_vertices, num_of_features):
+        super(SpatialAttentionLayer, self).__init__()
+        self._W1 = nn.Parameter(torch.FloatTensor(num_of_timesteps))  #for example (12)
+        self._W2 = nn.Parameter(torch.FloatTensor(num_of_features, num_of_timesteps)) #for example (1, 12)
+        self._W3 = nn.Parameter(torch.FloatTensor(num_of_features)) #for example (1)
+        self._bs = nn.Parameter(torch.FloatTensor(1, num_of_vertices, num_of_vertices)) #for example (1,307, 307)
+        self._Vs = nn.Parameter(torch.FloatTensor(num_of_vertices, num_of_vertices)) #for example (307, 307)
+
+        self._reset_parameters()
 
     def _reset_parameters(self):
         for p in self.parameters():
@@ -20,7 +22,6 @@ class SpatialAttentionLayer(nn.Module):
                 nn.init.xavier_uniform_(p)
             else:
                 nn.init.uniform_(p)
-
 
     def forward(self, x):
         """
@@ -69,9 +70,9 @@ class ChebConvWithSAt(nn.Module):
         """
         batch_size, num_of_vertices, num_of_features, num_of_timesteps = x.shape
 
-        if self.Theta.nelement() == 0:
-            self.Theta = nn.Parameter(torch.empty(self.K, num_of_features, self.num_of_filters))
-            nn.init.xavier_uniform_(self.Theta)
+        # if self.Theta.nelement() == 0:
+        #     self.Theta = nn.Parameter(torch.empty(self.K, num_of_features, self.num_of_filters))
+        #     nn.init.xavier_uniform_(self.Theta)
 
         outputs = []
         for time_step in range(num_of_timesteps):
@@ -90,30 +91,27 @@ class ChebConvWithSAt(nn.Module):
 class TemporalAttentionLayer(nn.Module):
     """
     Compute temporal attention scores
+    len_input=num_of_timesteps
+    in_channels=num_of_features
+    self.TAt = TemporalAttentionLayer(len_input,num_of_vertices,in_channels)
     """
-    def __init__(self,num_of_vertices, num_of_features, num_of_timesteps):
+    def __init__(self,num_of_timesteps, num_of_vertices, num_of_features):
         super(TemporalAttentionLayer, self).__init__()
         # 初始化为空的Parameter
-        self.U_1 = nn.Parameter(torch.FloatTensor())
-        self.U_2 = nn.Parameter(torch.FloatTensor())
-        self.U_3 = nn.Parameter(torch.FloatTensor())
-        self.b_e = nn.Parameter(torch.FloatTensor())
-        self.V_e = nn.Parameter(torch.FloatTensor())
+        self.U_1 = nn.Parameter(torch.FloatTensor(num_of_vertices))
+        self.U_2 = nn.Parameter(torch.FloatTensor(num_of_features, num_of_vertices))
+        self.U_3 = nn.Parameter(torch.FloatTensor(num_of_features))
+        self.b_e = nn.Parameter(torch.FloatTensor(1, num_of_timesteps, num_of_timesteps))
+        self.V_e = nn.Parameter(torch.FloatTensor(num_of_timesteps, num_of_timesteps))
 
-    def _initialize_parameters(self, num_of_vertices, num_of_features, num_of_timesteps):
-        # 判断是否需要初始化
-        if self.U_1.nelement() == 0:
-            self.U_1.data = torch.FloatTensor(num_of_vertices)
-            self.U_2.data = torch.FloatTensor(num_of_features, num_of_vertices)
-            self.U_3.data = torch.FloatTensor(num_of_features)
-            self.b_e.data = torch.FloatTensor(1, num_of_timesteps, num_of_timesteps)
-            self.V_e.data = torch.FloatTensor(num_of_timesteps, num_of_timesteps)
+        self._reset_parameters()
 
-            nn.init.xavier_uniform_(self.U_1)
-            nn.init.xavier_uniform_(self.U_2)
-            nn.init.xavier_uniform_(self.U_3)
-            nn.init.zeros_(self.b_e)
-            nn.init.xavier_uniform_(self.V_e)
+    def _reset_parameters(self):
+        for p in self.parameters():
+            if p.dim() > 1:
+                nn.init.xavier_uniform_(p)
+            else:
+                nn.init.uniform_(p)
 
     def forward(self, x):
         """
@@ -127,20 +125,23 @@ class TemporalAttentionLayer(nn.Module):
         E_normalized: torch.Tensor, S', spatial attention scores
                       shape is (batch_size, T_{r-1}, T_{r-1})
         """
+        # todo 可能性 x.shape.num_of_features=2, 初始化num_of_features=1
         batch_size, num_of_vertices, num_of_features, num_of_timesteps = x.shape
-        print('num_of_vertices:', num_of_vertices)
-        print('num_of_features:', num_of_features)
-        print('num_of_timesteps:', num_of_timesteps)
+        print('num_of_vertices:', num_of_vertices) # 38
+        print('num_of_features:', num_of_features) # 2
+        print('num_of_timesteps:', num_of_timesteps) # 5
+        print('x.permute(0, 3, 2, 1):', x.permute(0, 3, 2, 1).shape) # torch.Size([32, 5, 2, 38])
+        print('self.U_1:', self.U_1.shape) # torch.Size([38])
 
-        # self._initialize_parameters(num_of_vertices, num_of_features, num_of_timesteps)
+        _lsh = torch.matmul(x.permute(0, 3, 2, 1), self.U_1) # 32 5 2
 
-        lhs = torch.matmul(torch.matmul(x.permute(0, 3, 2, 1), self.U_1), self.U_2)
+        lhs = torch.matmul(_lsh, self.U_2)  #（32，5，2）x (2,38) = 32,5,38
 
-        rhs = torch.matmul(self.U_3, x.permute(2, 0, 1, 3))
+        rhs = torch.matmul(self.U_3, x) # (2)x()
 
         product = torch.matmul(lhs, rhs)
 
-        E = torch.matmul(self.V_e, torch.sigmoid(product + self.b_e).permute(1, 2, 0)).permute(2, 0, 1)
+        E = torch.matmul(self.V_e, torch.sigmoid(product + self.b_e))
 
         E_normalized = F.softmax(E, dim=1)
 
@@ -148,7 +149,7 @@ class TemporalAttentionLayer(nn.Module):
 
 
 class ASTGCNBlock(nn.Module):
-    def __init__(self, backbone, len_input=5,num_of_vertices=38,in_channels=1):
+    def __init__(self, backbone, len_input=5,num_of_vertices=38,in_channels=2):
         """
         Parameters
         ----------
@@ -168,8 +169,8 @@ class ASTGCNBlock(nn.Module):
         time_conv_strides = backbone['time_conv_strides']
         cheb_polynomials = backbone["cheb_polynomials"]
 
-        self.SAt = SpatialAttentionLayer()
-        self.TAt = TemporalAttentionLayer()
+        self.SAt = SpatialAttentionLayer(len_input,num_of_vertices,in_channels)
+        self.TAt = TemporalAttentionLayer(len_input,num_of_vertices,in_channels)
         self.cheb_conv_SAt = ChebConvWithSAt(
             num_of_filters=num_of_chev_filters,
             K=K,
@@ -244,22 +245,6 @@ class ASTGCNSubmodule(nn.Module):
             out_channels=num_for_prediction,
             kernel_size=(1, backbones[-1]['num_of_time_filters'])
         )
-        self.reset_parameters()
-
-    # 用于初始化或重置模型的参数
-    def reset_parameters(self):
-        """
-        用于对参数进行 Xavier 均匀初始化。Xavier 初始化（也称为 Glorot 初始化）是一种常用的权重初始化方法，
-    旨在保持输入和输出的方差相同，从而避免梯度消失或爆炸的问题
-        self.W 是一个 nn.Parameter 对象，表示模型中的一个可训练参数。
-    在这个具体的例子中，它是一个形状为 (num_of_vertices, num_for_prediction) 的权重矩阵，用于对模型的最后输出进行线性变换
-        """
-        for p in self.parameters():
-            if p.dim() > 1:
-                nn.init.xavier_uniform_(p)
-            else:
-                nn.init.uniform_(p)
-
 
     def forward(self, x):
         """
