@@ -8,12 +8,17 @@ class SpatialAttentionLayer(nn.Module):
     """
     def __init__(self, num_of_timesteps, num_of_vertices, num_of_features):
         super(SpatialAttentionLayer, self).__init__()
-        self._W1 = nn.Parameter(torch.FloatTensor(num_of_timesteps))  #for example (12)
-        self._W2 = nn.Parameter(torch.FloatTensor(num_of_features, num_of_timesteps)) #for example (1, 12)
-        self._W3 = nn.Parameter(torch.FloatTensor(num_of_features)) #for example (1)
-        self._bs = nn.Parameter(torch.FloatTensor(1, num_of_vertices, num_of_vertices)) #for example (1,307, 307)
-        self._Vs = nn.Parameter(torch.FloatTensor(num_of_vertices, num_of_vertices)) #for example (307, 307)
-
+        # self._W1 = nn.Parameter(torch.FloatTensor(num_of_timesteps))  #for example (12)
+        # self._W2 = nn.Parameter(torch.FloatTensor(num_of_features, num_of_timesteps)) #for example (1, 12)
+        # self._W3 = nn.Parameter(torch.FloatTensor(num_of_features)) #for example (1)
+        # self._bs = nn.Parameter(torch.FloatTensor(1, num_of_vertices, num_of_vertices)) #for example (1,307, 307)
+        # self._Vs = nn.Parameter(torch.FloatTensor(num_of_vertices, num_of_vertices)) #for example (307, 307)
+        self._W1 = None
+        self._W2 = None
+        self._W3 = None
+        self._bs = None
+        self._Vs = None
+        self.initialized = False
         self._reset_parameters()
 
     def _reset_parameters(self):
@@ -28,6 +33,16 @@ class SpatialAttentionLayer(nn.Module):
         :param x: (batch_size, N, F_in, T)
         :return: (B,N,N)
         """
+        _, num_of_vertices, num_of_features, num_of_timesteps = x.shape
+        if not self.initialized:
+            # 根据输入动态初始化参数，但仅在第一次调用时进行
+            self._W1 = nn.Parameter(torch.randn(num_of_timesteps, device=x.device))
+            self._W2 = nn.Parameter(torch.randn(num_of_features, num_of_timesteps, device=x.device))
+            self._W3 = nn.Parameter(torch.randn(num_of_features, device=x.device))
+            self._bs = nn.Parameter(torch.randn(1, num_of_vertices, num_of_vertices, device=x.device))
+            self._Vs = nn.Parameter(torch.randn(num_of_vertices, num_of_vertices, device=x.device))
+            self.initialized = True
+
         lhs = torch.matmul(torch.matmul(x, self._W1), self._W2)
 
         rhs = torch.matmul(self._W3, x).transpose(-1, -2)
@@ -45,44 +60,47 @@ class ChebConvWithSAt(nn.Module):
     """
     K-order Chebyshev graph convolution with Spatial Attention scores
     """
-    def __init__(self, num_of_filters, K, cheb_polynomials, **kwargs):
-        super(ChebConvWithSAt, self).__init__(**kwargs)
+    def __init__(self, K, cheb_polynomials, in_channels, out_channels):
+        """
+        :param K: int
+        :param in_channles: int, num of channels in the input sequence
+        :param out_channels: int, num of channels in the output sequence
+        """
+        super(ChebConvWithSAt, self).__init__()
         self.K = K
-        self.num_of_filters = num_of_filters
         self.cheb_polynomials = cheb_polynomials
-        self.Theta = nn.ParameterList([nn.Parameter(torch.FloatTensor()) for _ in range(K)])
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        # self.Theta = nn.ParameterList([nn.Parameter(torch.FloatTensor(in_channels, out_channels)) for _ in range(K)])
+        self.Theta = None
 
     def forward(self, x, spatial_attention):
         """
         Chebyshev graph convolution operation
 
-        Parameters
-        ----------
-        x: torch.Tensor, graph signal matrix
-           shape is (batch_size, N, F, T_{r-1}), F is the num of features
-
-        spatial_attention: torch.Tensor, shape is (batch_size, N, N)
-                           spatial attention scores
-
-        Returns
-        ----------
-        torch.Tensor, shape is (batch_size, N, self.num_of_filters, T_{r-1})
+        Chebyshev graph convolution operation
+        :param spatial_attention:  shape is (batch_size, N, N) spatial attention scores
+        :param x: (batch_size, N, F_in, T)
+        :return: (batch_size, N, F_out, T)
         """
+        # in_channels = num_of_features
         batch_size, num_of_vertices, num_of_features, num_of_timesteps = x.shape
-
+        if self.Theta is None:
+            self.Theta = nn.Parameter(torch.empty(self.K, num_of_features, self.out_channels, device=x.device))
+            nn.init.xavier_uniform_(self.Theta)
         # if self.Theta.nelement() == 0:
         #     self.Theta = nn.Parameter(torch.empty(self.K, num_of_features, self.num_of_filters))
         #     nn.init.xavier_uniform_(self.Theta)
 
         outputs = []
         for time_step in range(num_of_timesteps):
-            graph_signal = x[:, :, :, time_step]
-            output = torch.zeros((batch_size, num_of_vertices, self.num_of_filters), device=x.device)
+            graph_signal = x[:, :, :, time_step] # (b, N, F_in)
+            output = torch.zeros((batch_size, num_of_vertices, self.out_channels), device=x.device)
             for k in range(self.K):
                 T_k = self.cheb_polynomials[k]
-                T_k_with_at = T_k * spatial_attention
-                theta_k = self.Theta[k]
-                rhs = torch.matmul(T_k_with_at.permute(0, 2, 1), graph_signal)
+                T_k_with_at = T_k.mul(spatial_attention)   # (N,N)*(N,N) = (N,N) 多行和为1, 按着列进行归一化
+                theta_k = self.Theta[k]   # (in_channel, out_channel)
+                rhs = T_k_with_at.permute(0, 2, 1).matmul(graph_signal)  # (N, N)(b, N, F_in) = (b, N, F_in) 因为是左乘，所以多行和为1变为多列和为1，即一行之和为1，进行左乘
                 output = output + torch.matmul(rhs, theta_k)
             outputs.append(output.unsqueeze(-1))
         return F.relu(torch.cat(outputs, dim=-1))
@@ -97,13 +115,18 @@ class TemporalAttentionLayer(nn.Module):
     """
     def __init__(self,num_of_timesteps, num_of_vertices, num_of_features):
         super(TemporalAttentionLayer, self).__init__()
+        self.V_e = None
+        self.b_e = None
+        self.U_3 = None
+        self.U_2 = None
+        self.U_1 = None
+        self.initialized = False
         # 初始化为空的Parameter
-        self.U_1 = nn.Parameter(torch.FloatTensor(num_of_vertices))
-        self.U_2 = nn.Parameter(torch.FloatTensor(num_of_features, num_of_vertices))
-        self.U_3 = nn.Parameter(torch.FloatTensor(num_of_features))
-        self.b_e = nn.Parameter(torch.FloatTensor(1, num_of_timesteps, num_of_timesteps))
-        self.V_e = nn.Parameter(torch.FloatTensor(num_of_timesteps, num_of_timesteps))
-
+    #     self.U_1 = nn.Parameter(torch.FloatTensor(num_of_vertices))
+    #     self.U_2 = nn.Parameter(torch.FloatTensor(num_of_features, num_of_vertices))
+    #     self.U_3 = nn.Parameter(torch.FloatTensor(num_of_features))
+    #     self.b_e = nn.Parameter(torch.FloatTensor(1, num_of_timesteps, num_of_timesteps))
+    #     self.V_e = nn.Parameter(torch.FloatTensor(num_of_timesteps, num_of_timesteps))
         self._reset_parameters()
 
     def _reset_parameters(self):
@@ -125,26 +148,36 @@ class TemporalAttentionLayer(nn.Module):
         E_normalized: torch.Tensor, S', spatial attention scores
                       shape is (batch_size, T_{r-1}, T_{r-1})
         """
-        # todo 可能性 x.shape.num_of_features=2, 初始化num_of_features=1
         batch_size, num_of_vertices, num_of_features, num_of_timesteps = x.shape
+
+        if not self.initialized:
+            # 根据输入动态初始化参数，但仅在第一次调用时进行
+            self.U_1 = nn.Parameter(torch.randn(num_of_vertices, device=x.device))
+            self.U_2 = nn.Parameter(torch.randn(num_of_features, num_of_vertices, device=x.device))
+            self.U_3 = nn.Parameter(torch.randn(num_of_features, device=x.device))
+            self.b_e = nn.Parameter(torch.randn(1, num_of_timesteps, num_of_timesteps, device=x.device))
+            self.V_e = nn.Parameter(torch.randn(num_of_timesteps, num_of_timesteps, device=x.device))
+            self.initialized = True
+
         print('num_of_vertices:', num_of_vertices) # 38
-        print('num_of_features:', num_of_features) # 2
+        print('num_of_features:', num_of_features) # 2   64
         print('num_of_timesteps:', num_of_timesteps) # 5
-        print('x.permute(0, 3, 2, 1):', x.permute(0, 3, 2, 1).shape) # torch.Size([32, 5, 2, 38])
+        print('x.permute(0, 3, 2, 1):', x.permute(0, 3, 2, 1).shape) # torch.Size([32, 5, 2, 38])   torch.Size([32, 5, 64, 38])
         print('self.U_1:', self.U_1.shape) # torch.Size([38])
 
-        _lsh = torch.matmul(x.permute(0, 3, 2, 1), self.U_1) # 32 5 2
-
-        lhs = torch.matmul(_lsh, self.U_2)  #（32，5，2）x (2,38) = 32,5,38
-
-        rhs = torch.matmul(self.U_3, x) # (2)x()
-
+        _lsh = torch.matmul(x.permute(0, 3, 2, 1), self.U_1)
+        print('_lsh:', _lsh.shape) # torch.Size([32, 5, 2])    torch.Size([32, 5, 64])
+        print('self.U_2:', self.U_2.shape) # torch.Size([2, 38])
+        lhs = torch.matmul(_lsh, self.U_2)  #（32，5，2）x (2,38) = 32,5,38      (32,5,64)x(64,38) = 32,5,38
+        print('lhs:', lhs.shape)
+        rhs = torch.matmul(self.U_3, x)
+        print('rhs:', rhs.shape)
         product = torch.matmul(lhs, rhs)
 
         E = torch.matmul(self.V_e, torch.sigmoid(product + self.b_e))
 
         E_normalized = F.softmax(E, dim=1)
-
+        print('========================')
         return E_normalized
 
 
@@ -171,10 +204,13 @@ class ASTGCNBlock(nn.Module):
 
         self.SAt = SpatialAttentionLayer(len_input,num_of_vertices,in_channels)
         self.TAt = TemporalAttentionLayer(len_input,num_of_vertices,in_channels)
+        # out_channels = num_of_filters = num_of_chev_filters
         self.cheb_conv_SAt = ChebConvWithSAt(
-            num_of_filters=num_of_chev_filters,
             K=K,
-            cheb_polynomials=cheb_polynomials)
+            cheb_polynomials=cheb_polynomials,
+            in_channels=in_channels,
+            out_channels=num_of_chev_filters
+            )
         self.time_conv = nn.Conv2d(
             in_channels=num_of_chev_filters,
             out_channels=num_of_time_filters,
@@ -182,12 +218,20 @@ class ASTGCNBlock(nn.Module):
             padding=(0, 1),
             stride=(1, time_conv_strides))
         self.residual_conv = nn.Conv2d(
-            in_channels=num_of_chev_filters,
+            in_channels=in_channels,
             out_channels=num_of_time_filters,
             kernel_size=(1, 1),
             stride=(1, time_conv_strides))
         self.ln = nn.LayerNorm(num_of_time_filters)
 
+        self._reset_parameters()
+
+    def _reset_parameters(self):
+        for p in self.parameters():
+            if p.dim() > 1:
+                nn.init.xavier_uniform_(p)
+            else:
+                nn.init.uniform_(p)
     def forward(self, x):
         """
         Parameters
@@ -210,11 +254,12 @@ class ASTGCNBlock(nn.Module):
         spatial_gcn = self.cheb_conv_SAt(x, spatial_At)
 
         # Convolution along time axis
-        time_conv_output = self.time_conv(spatial_gcn.permute(0, 2, 1, 3)).permute(0, 2, 1, 3)
-
+        time_conv_output = self.time_conv(spatial_gcn.permute(0, 2, 1, 3))
+        print('time_conv_output:', time_conv_output.shape) # torch.Size([32, 64, 38, 5])
         # residual shortcut
+        # todo
         x_residual = self.residual_conv(x.permute(0, 2, 1, 3))  # (b,N,F,T)->(b,F,N,T) 用(1,1)的卷积核去做->(b,F,N,T)
-
+        print('x_residual:', x_residual.shape)
         x_residual = self.ln(F.relu(x_residual + time_conv_output).permute(0, 3, 2, 1)).permute(0, 2, 3, 1)
         # (b,F,N,T)->(b,T,N,F) -ln-> (b,T,N,F)->(b,N,F,T)
 
@@ -282,6 +327,14 @@ class ASTGCN(nn.Module):
         for backbones in all_backbones:
             self.submodules.append(ASTGCNSubmodule(num_for_prediction, backbones))
 
+        self._reset_parameters()
+
+    def _reset_parameters(self):
+        for p in self.parameters():
+            if p.dim() > 1:
+                nn.init.xavier_uniform_(p)
+            else:
+                nn.init.uniform_(p)
     def forward(self, x_list):
         """
         Parameters
