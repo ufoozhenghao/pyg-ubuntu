@@ -182,7 +182,7 @@ class TemporalAttentionLayer(nn.Module):
 
 
 class ASTGCNBlock(nn.Module):
-    def __init__(self, backbone, len_input=5,num_of_vertices=38,in_channels=2):
+    def __init__(self, backbone, index, len_input=5,num_of_vertices=38,in_channels=2):
         """
         Parameters
         ----------
@@ -202,6 +202,7 @@ class ASTGCNBlock(nn.Module):
         time_conv_strides = backbone['time_conv_strides']
         cheb_polynomials = backbone["cheb_polynomials"]
 
+        self.index = index
         self.SAt = SpatialAttentionLayer(len_input,num_of_vertices,in_channels)
         self.TAt = TemporalAttentionLayer(len_input,num_of_vertices,in_channels)
         # out_channels = num_of_filters = num_of_chev_filters
@@ -254,13 +255,15 @@ class ASTGCNBlock(nn.Module):
         spatial_gcn = self.cheb_conv_SAt(x, spatial_At)
 
         # Convolution along time axis
-        time_conv_output = self.time_conv(spatial_gcn.permute(0, 2, 1, 3))
+        time_conv_output = (self.time_conv(spatial_gcn.permute(0, 2, 1, 3)).permute(0, 2, 1, 3))
         print('time_conv_output:', time_conv_output.shape) # torch.Size([32, 64, 38, 5])
         # residual shortcut
-        # todo
-        x_residual = self.residual_conv(x.permute(0, 2, 1, 3))  # (b,N,F,T)->(b,F,N,T) 用(1,1)的卷积核去做->(b,F,N,T)
+        print(f"Processing in ASTGCNBlock_{self.index}")
+        # (b,N,F,T)->(b,F,N,T) 用(1,1)的卷积核去做->(b,F,N,T)
+        x_residual = (self.residual_conv(x.permute(0,2,1,3)).permute(0,2,1,3))
         print('x_residual:', x_residual.shape)
-        x_residual = self.ln(F.relu(x_residual + time_conv_output).permute(0, 3, 2, 1)).permute(0, 2, 3, 1)
+        # todo self.ln
+        x_residual = self.ln(F.relu(x_residual + time_conv_output))
         # (b,F,N,T)->(b,T,N,F) -ln-> (b,T,N,F)->(b,N,F,T)
 
         return x_residual
@@ -282,7 +285,7 @@ class ASTGCNSubmodule(nn.Module):
 
         self.blocks = nn.Sequential()
         for idx, backbone in enumerate(backbones):
-            self.blocks.add_module(f"ASTGCNBlock_{idx}", ASTGCNBlock(backbone))
+            self.blocks.add_module(f"ASTGCNBlock_{idx}", ASTGCNBlock(backbone,idx))
 
         # Use convolution to generate the prediction instead of using the fully connected layer
         self.final_conv = nn.Conv2d(
